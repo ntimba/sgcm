@@ -1,0 +1,102 @@
+# =============================================================================
+# SGCM - .gitignore
+# =============================================================================
+
+# ------------------------------------
+# Secrets & Certificats (NE JAMAIS commiter)
+# ------------------------------------
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+*.crt
+nginx/certs/*
+!nginx/certs/.gitkeep
+
+# ------------------------------------
+# Dépendances
+# ------------------------------------
+node_modules/
+**/node_modules/
+.npm
+.pnp
+.pnp.js
+.yarn/
+yarn-error.log
+
+# ------------------------------------
+# Builds & Cache
+# ------------------------------------
+dist/
+build/
+**/dist/
+**/build/
+.cache/
+.parcel-cache/
+.vite/
+.next/
+.turbo/
+
+# ------------------------------------
+# Logs
+# ------------------------------------
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# ------------------------------------
+# Volumes Docker / Données persistantes
+# ------------------------------------
+db-data/
+postgres-data/
+volumes/
+
+# ------------------------------------
+# Tests
+# ------------------------------------
+coverage/
+.nyc_output/
+*.lcov
+
+# ------------------------------------
+# IDE / Editeurs
+# ------------------------------------
+.vscode/
+!.vscode/settings.json.example
+.idea/
+*.swp
+*.swo
+*~
+.project
+.classpath
+
+# ------------------------------------
+# OS
+# ------------------------------------
+.DS_Store
+Thumbs.db
+desktop.ini
+$RECYCLE.BIN/
+
+# ------------------------------------
+# Fichiers temporaires
+# ------------------------------------
+*.tmp
+*.temp
+*.bak
+*.orig
+
+# ------------------------------------
+# Spécifique au projet
+# ------------------------------------
+# Uploads utilisateurs (si tu en ajoutes plus tard)
+uploads/
+public/uploads/
+
+# Documents de travail à ne pas versionner
+*.draft.md
+notes-perso/

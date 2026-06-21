@@ -1,0 +1,154 @@
+# =============================================================================
+# SGCM - Système de Gestion de Centre Médical
+# Stack conforme au cahier des charges : Node.js + Express + React + PostgreSQL
+#
+# Architecture :
+#   [Navigateurs Patient/Employé]
+#             |
+#         HTTPS (443)
+#             |
+#       +-----v------+
+#       |  frontend  | <-- nginx + build React/Tailwind (statique)
+#       |  (nginx)   | --- reverse proxy /api --> backend
+#       +------------+
+#                        +--------+
+#                        |  app   | <-- Node.js + Express + JWT
+#                        +--------+
+#                          /     \
+#                  SQL    /       \   HTTPS
+#                        v         v
+#                    +------+   [Brevo API externe]
+#                    |  db  |   [Google ReCaptcha API]
+#                    | (PG) |
+#                    +------+
+#
+#   [scheduler: cron] -> http://app:3000/rappels/envoyer (réseau interne)
+# =============================================================================
+
+services:
+    # ---------------------------------------------------------------------------
+    # Frontend = nginx servant le build React + reverse proxy HTTPS
+    # ---------------------------------------------------------------------------
+    frontend:
+        build:
+            context: ./frontend
+        container_name: sgcm-frontend
+        ports:
+            - "80:80"
+            - "443:443"
+        volumes:
+            - ./nginx/conf.d:/etc/nginx/conf.d:ro
+            - ./nginx/certs:/etc/nginx/certs:ro
+        environment:
+            VITE_RECAPTCHA_SITE_KEY: ${RECAPTCHA_SITE_KEY}
+            VITE_API_URL: /api
+        depends_on:
+            - app
+        networks:
+            - sgcm-net
+        restart: unless-stopped
+
+    # ---------------------------------------------------------------------------
+    # Backend = API Node.js + Express + JWT
+    # ---------------------------------------------------------------------------
+    app:
+        build:
+            context: ./backend
+        container_name: sgcm-app
+        expose:
+            - "3000"
+        environment:
+            NODE_ENV: production
+            PORT: 3000
+
+            # --- Authentification JWT ---
+            JWT_SECRET: ${JWT_SECRET}
+            JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-1h}
+
+            # --- PostgreSQL ---
+            DB_HOST: db
+            DB_PORT: 5432
+            DB_NAME: sgcm
+            DB_USER: sgcm_user
+            DB_PASSWORD: ${DB_PASSWORD}
+
+            # --- Brevo (e-mails transactionnels) ---
+            BREVO_API_URL: https://api.brevo.com/v3/smtp/email
+            BREVO_API_KEY: ${BREVO_API_KEY}
+            MAIL_FROM: ${MAIL_FROM}
+
+            # --- ReCaptcha (vérification côté serveur) ---
+            RECAPTCHA_SECRET: ${RECAPTCHA_SECRET}
+
+            # --- Chiffrement des données médicales/sensibles ---
+            ENCRYPTION_KEY: ${ENCRYPTION_KEY}
+
+            # --- Token pour authentifier les appels du scheduler ---
+            SCHEDULER_TOKEN: ${SCHEDULER_TOKEN}
+        depends_on:
+            db:
+                condition: service_healthy
+        networks:
+            - sgcm-net
+        restart: unless-stopped
+
+    # ---------------------------------------------------------------------------
+    # Base de données PostgreSQL
+    # ---------------------------------------------------------------------------
+    db:
+        image: postgres:16-alpine
+        container_name: sgcm-db
+        # ⚠️ Exposition du port pour outils externes (pgAdmin, DBeaver) - DEV UNIQUEMENT
+        # Le préfixe 127.0.0.1: limite l'accès à la machine locale (pas Internet).
+        # ⛔ À retirer ou commenter en production.
+        ports:
+            - "127.0.0.1:5432:5432"
+        environment:
+            POSTGRES_DB: sgcm
+            POSTGRES_USER: sgcm_user
+            POSTGRES_PASSWORD: ${DB_PASSWORD}
+        volumes:
+            - db-data:/var/lib/postgresql/data
+            # Script d'init (joué uniquement lorsque le volume db-data est vide)
+            - ./db/Base_Donnees_SGCM.sql:/docker-entrypoint-initdb.d/init.sql:ro
+        healthcheck:
+            test: ["CMD-SHELL", "pg_isready -U sgcm_user -d sgcm"]
+            interval: 10s
+            timeout: 5s
+            retries: 10
+        networks:
+            - sgcm-net
+        restart: unless-stopped
+
+    # ---------------------------------------------------------------------------
+    # Planificateur de tâches : Cron déclenchant les rappels de RDV
+    # Utilise maintenant un Dockerfile dédié dans ./scheduler/
+    # ---------------------------------------------------------------------------
+    scheduler:
+        build:
+            context: ./scheduler
+        container_name: sgcm-scheduler
+        volumes:
+            - ./scheduler/Script_Cron_Rappels.sh:/usr/local/bin/rappels.sh:ro
+            - ./scheduler/crontab:/etc/crontabs/root:ro
+        environment:
+            APP_URL: http://app:3000
+            SCHEDULER_TOKEN: ${SCHEDULER_TOKEN}
+        depends_on:
+            - app
+        networks:
+            - sgcm-net
+        restart: unless-stopped
+
+# =============================================================================
+# Services NON conteneurisés (externes au compose) :
+#   - Brevo     -> API SaaS jointe par `app` via BREVO_API_*
+#   - ReCaptcha -> API Google jointe par `app` (vérif) et le navigateur (widget)
+# =============================================================================
+
+volumes:
+    db-data:
+
+networks:
+    sgcm-net:
+        driver: bridge
