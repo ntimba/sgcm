@@ -1,45 +1,28 @@
 # =============================================================================
-# Frontend SGCM - Build multi-stage
-#   Stage 1 : compile React + Tailwind avec Node
-#   Stage 2 : sert les fichiers statiques avec nginx (qui fait aussi reverse
-#             proxy vers le backend Express - voir nginx/conf.d/default.conf)
+# Backend SGCM - API Node.js + Express + JWT
 # =============================================================================
 
-# -----------------------------------------------------------------------------
-# Stage 1 : Build du bundle React
-# -----------------------------------------------------------------------------
-FROM node:20-alpine AS build
+FROM node:20-alpine
 
 WORKDIR /app
 
-# Installer les dépendances (avec cache Docker optimisé)
+# Installation des dépendances (cache optimisé)
 COPY package*.json ./
-RUN npm ci
+RUN npm ci --omit=dev && npm cache clean --force
 
-# Copier les sources et construire
+# Copie du code applicatif
 COPY . .
 
-# Variables exposées au build (clé publique ReCaptcha, URL de l'API...)
-ARG VITE_RECAPTCHA_SITE_KEY
-ARG VITE_API_URL=/api
-ENV VITE_RECAPTCHA_SITE_KEY=$VITE_RECAPTCHA_SITE_KEY
-ENV VITE_API_URL=$VITE_API_URL
+# Bonnes pratiques sécurité : ne pas exécuter en root
+RUN chown -R node:node /app
+USER node
 
-RUN npm run build
-# NOTE : si tu utilises Create-React-App au lieu de Vite, remplace 'dist' par
-# 'build' dans le COPY ci-dessous.
+# L'API Express écoute sur le port 3000
+EXPOSE 3000
 
-# -----------------------------------------------------------------------------
-# Stage 2 : Image de production = nginx + fichiers statiques
-# -----------------------------------------------------------------------------
-FROM nginx:alpine
+# Health check (le endpoint /health doit exister dans server.js)
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+  CMD wget --quiet --tries=1 --spider http://localhost:3000/health || exit 1
 
-# Copier le build React depuis le stage précédent
-COPY --from=build /app/dist /usr/share/nginx/html
-
-# La config nginx (TLS + reverse proxy /api) est montée via docker-compose
-# (volume nginx/conf.d) - voir nginx/conf.d/default.conf
-
-EXPOSE 80 443
-
-CMD ["nginx", "-g", "daemon off;"]
+# Point d'entrée : server.js à la racine de backend/
+CMD ["node", "server.js"]
