@@ -66,7 +66,7 @@ app.get("/", (req, res) => {
 // -----------------------------------------------------------------------------
 // Routes métier (à décommenter au fur et à mesure que tu les crées)
 // -----------------------------------------------------------------------------
-// app.use("/auth",     require("./routes/authRoutes"));
+app.use("/auth", require("./routes/authRoutes"));
 // app.use("/patients", require("./routes/patientRoutes"));
 // app.use("/rdv",      require("./routes/rendezVousRoutes"));
 // app.use("/admin",    require("./routes/adminRoutes"));

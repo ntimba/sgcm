@@ -1,25 +1,28 @@
 # =============================================================================
-# Backend SGCM - API Node.js / Express
+# Backend SGCM - API Node.js + Express + JWT
 # =============================================================================
 
 FROM node:20-alpine
 
-# Création et positionnement dans le dossier de travail
 WORKDIR /app
 
-# Copie des fichiers de configuration des dépendances
+# Installation des dépendances (cache optimisé)
 COPY package*.json ./
+RUN npm ci --omit=dev && npm cache clean --force
 
-# Installation des dépendances (uniquement celles de production si désiré)
-RUN npm install
-
-# Copie du reste du code source du backend
+# Copie du code applicatif
 COPY . .
 
-# L'API tourne sur le port 3000 (comme défini dans ton docker-compose)
+# Bonnes pratiques sécurité : ne pas exécuter en root
+RUN chown -R node:node /app
+USER node
+
+# L'API Express écoute sur le port 3000
 EXPOSE 3000
 
-# Commande de démarrage de ton serveur Node.js
-# Ajuste "server.js" ou "index.js" selon le nom de ton fichier principal
-# ou utilise "npm start" si tu as défini un script de démarrage.
+# Health check (le endpoint /health doit exister dans server.js)
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+  CMD wget --quiet --tries=1 --spider http://localhost:3000/health || exit 1
+
+# Point d'entrée : server.js à la racine de backend/
 CMD ["node", "server.js"]
