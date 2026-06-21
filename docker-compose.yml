@@ -32,6 +32,9 @@ services:
     frontend:
         build:
             context: ./frontend
+            args:
+                VITE_RECAPTCHA_SITE_KEY: ${RECAPTCHA_SITE_KEY}
+                VITE_API_URL: /api
         container_name: sgcm-frontend
         ports:
             - "80:80"
@@ -39,9 +42,6 @@ services:
         volumes:
             - ./nginx/conf.d:/etc/nginx/conf.d:ro
             - ./nginx/certs:/etc/nginx/certs:ro
-        environment:
-            VITE_RECAPTCHA_SITE_KEY: ${RECAPTCHA_SITE_KEY}
-            VITE_API_URL: /api
         depends_on:
             - app
         networks:
@@ -102,7 +102,7 @@ services:
         # Le préfixe 127.0.0.1: limite l'accès à la machine locale (pas Internet).
         # ⛔ À retirer ou commenter en production.
         ports:
-            - "127.0.0.1:5432:5432"
+            - "127.0.0.1:5433:5432"
         environment:
             POSTGRES_DB: sgcm
             POSTGRES_USER: sgcm_user
