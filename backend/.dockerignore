@@ -1,0 +1,68 @@
+# =============================================================================
+
+# Backend SGCM - .dockerignore
+
+# Évite de copier des fichiers inutiles (ou dangereux !) dans l'image Docker.
+
+# Réduit la taille de l'image et accélère le build.
+
+# =============================================================================
+
+# --- Dépendances (réinstallées par `npm ci` dans le Dockerfile) ---
+
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log\*
+
+# --- Secrets (NE JAMAIS embarquer dans l'image !) ---
+
+.env
+.env._
+!.env.example
+_.pem
+\*.key
+
+# --- Git ---
+
+.git/
+.gitignore
+.gitattributes
+
+# --- Docker (évite la récursion) ---
+
+Dockerfile
+.dockerignore
+docker-compose\*.yml
+
+# --- Documentation ---
+
+README.md
+CHANGELOG.md
+LICENSE
+docs/
+
+# --- Tests et couverture ---
+
+coverage/
+.nyc_output/
+**/\*.test.js
+**/\*.spec.js
+**tests**/
+
+# --- IDE ---
+
+.vscode/
+.idea/
+_.swp
+_.swo
+
+# --- OS ---
+
+.DS_Store
+Thumbs.db
+
+# --- Logs ---
+
+logs/
+\*.log

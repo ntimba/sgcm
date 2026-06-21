@@ -1,0 +1,11 @@
+# =============================================================================
+# Crontab du service `scheduler`
+# Format : minute heure jour mois jour-semaine commande
+# Les sorties sont redirigées vers stdout (capté par les logs Docker)
+# =============================================================================
+
+# Envoi des rappels de RDV chaque jour à 08:00 (J-1)
+0 8 * * * /usr/local/bin/rappels.sh >> /proc/1/fd/1 2>&1
+
+# Nettoyage des tokens expirés chaque nuit à 03:30 (exemple)
+# 30 3 * * * curl -s -X POST -H "Authorization: Bearer $SCHEDULER_TOKEN" $APP_URL/api/maintenance/cleanup >> /proc/1/fd/1 2>&1
