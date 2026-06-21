@@ -6,6 +6,7 @@ const bcrypt = require("bcrypt");
 const db = require("../config/db");
 const Utilisateur = require("../models/Utilisateur");
 const Patient = require("../models/Patient");
+const { verifyRecaptcha } = require("../services/recaptchaService");
 
 const BCRYPT_ROUNDS = 12;
 
@@ -22,6 +23,7 @@ function validateRegisterInput(body) {
         dateNaissance,
         adresse,
         numeroAssure,
+        recaptchaToken,
     } = body;
 
     if (
@@ -61,6 +63,9 @@ function validateRegisterInput(body) {
     ) {
         errors.push("Le numéro d'assuré est requis.");
     }
+    if (!recaptchaToken || typeof recaptchaToken !== "string") {
+        errors.push("Vérification ReCaptcha manquante.");
+    }
 
     return errors;
 }
@@ -69,6 +74,7 @@ function validateRegisterInput(body) {
 // POST /auth/register
 //
 // Crée un compte Utilisateur + Patient en une transaction.
+//   - Vérifie le ReCaptcha côté serveur (anti-bot réel, pas juste cosmétique)
 //   - Hash du mot de passe (bcrypt, 12 rounds)
 //   - Rôle FORCÉ à 'patient' (jamais lu depuis req.body -> anti-élévation de privilège)
 //   - 400 si email déjà utilisé
@@ -76,7 +82,7 @@ function validateRegisterInput(body) {
 // -----------------------------------------------------------------------------
 async function register(req, res) {
     try {
-        // 1. Validation des champs
+        // 1. Validation des champs (inclut la présence du token recaptcha)
         const errors = validateRegisterInput(req.body);
         if (errors.length > 0) {
             return res
@@ -93,10 +99,22 @@ async function register(req, res) {
             telephone,
             adresse,
             numeroAssure,
+            recaptchaToken,
         } = req.body;
+
+        // 2. Vérification ReCaptcha AUPRÈS DE GOOGLE (côté serveur)
+        //    ⚠️ Sans cette étape, le widget React ne serait que visuel : un bot
+        //    pourrait appeler cette route directement en ignorant le captcha.
+        const recaptchaResult = await verifyRecaptcha(recaptchaToken, req.ip);
+        if (!recaptchaResult.success) {
+            return res.status(400).json({
+                error: "Vérification anti-robot échouée. Merci de réessayer.",
+            });
+        }
+
         const normalizedEmail = email.trim().toLowerCase();
 
-        // 2. Vérifier que l'email n'existe pas déjà
+        // 3. Vérifier que l'email n'existe pas déjà
         const existing = await Utilisateur.findByEmail(normalizedEmail);
         if (existing) {
             return res
@@ -104,15 +122,13 @@ async function register(req, res) {
                 .json({ error: "Cette adresse email est déjà utilisée." });
         }
 
-        // 3. Vérifier l'unicité du téléphone (si fourni) et du numéro d'assuré
+        // 4. Vérifier l'unicité du téléphone (si fourni) et du numéro d'assuré
         if (telephone) {
             const telExists = await Patient.telephoneExists(db, telephone);
             if (telExists) {
-                return res
-                    .status(400)
-                    .json({
-                        error: "Ce numéro de téléphone est déjà utilisé.",
-                    });
+                return res.status(400).json({
+                    error: "Ce numéro de téléphone est déjà utilisé.",
+                });
             }
         }
         const assureExists = await Patient.numeroAssureExists(db, numeroAssure);
@@ -122,10 +138,10 @@ async function register(req, res) {
                 .json({ error: "Ce numéro d'assuré est déjà utilisé." });
         }
 
-        // 4. Hash du mot de passe (JAMAIS stocké en clair)
+        // 5. Hash du mot de passe (JAMAIS stocké en clair)
         const motDePasseHash = await bcrypt.hash(motDePasse, BCRYPT_ROUNDS);
 
-        // 5. Transaction : crée Utilisateur PUIS Patient (cohérence garantie)
+        // 6. Transaction : crée Utilisateur PUIS Patient (cohérence garantie)
         //    ⚠️ role: 'patient' est codé en dur ici. Le client ne peut JAMAIS
         //    injecter un autre rôle, même s'il envoie { "role": "administrateur" }
         //    dans le body -> ce champ est tout simplement ignoré.
@@ -149,7 +165,7 @@ async function register(req, res) {
             return { utilisateur, patient };
         });
 
-        // 6. Réponse : ne JAMAIS renvoyer le hash du mot de passe
+        // 7. Réponse : ne JAMAIS renvoyer le hash du mot de passe
         return res.status(201).json({
             message: "Compte patient créé avec succès.",
             utilisateur: {
